@@ -22,15 +22,8 @@ mount -o bind /system/lib64/libpdx_default_transport.so /vendor/lib64/libpdx_def
 mount -o bind /system/lib/libpdx_default_transport.so /vendor/lib/vndk/libpdx_default_transport.so || true
 mount -o bind /system/lib64/libpdx_default_transport.so /vendor/lib64/vndk/libpdx_default_transport.so || true
 
-# drop qcom location for mi mix 3
-if getprop ro.vendor.build.fingerprint | grep -iq \
-    -e iaomi/perseus/perseus;then
-    mount -o bind /mnt/phh/empty_dir /system/priv-app/com.qualcomm.location || true
-fi
-
 # drop qcom stuffs for non qcom devices
 if ! getprop ro.hardware | grep -qiE -e qcom -e mata;then
-    mount -o bind /mnt/phh/empty_dir /system/priv-app/com.qualcomm.location || true
     mount -o bind /mnt/phh/empty_dir /system/app/imssettings || true
     mount -o bind /mnt/phh/empty_dir /system/priv-app/ims || true
     mount -o bind /mnt/phh/empty_dir /system/app/ims || true
@@ -50,6 +43,10 @@ for overlay in $vendor_overlays; do
         fi
     fi
 done
+
+if getprop ro.vendor.build.fingerprint | grep -qiE '^samsung/' ;then
+    mount -o bind /mnt/phh/empty_dir "/vendor/overlay" || true
+fi
 
 # Fix no Earpiece in audio_policy
 for f in \
@@ -85,16 +82,6 @@ if [ ! -f /vendor/bin/hw/android.hardware.light* ]; then
     done
 fi
 
-# Patch surfaceflinger on boot if already patched before
-if mount -o remount,rw /system; then
-    # Just checking remount ability
-    mount -o remount,ro /system || true
-else
-    if [ -f /data/local/tmp/libs.so ]; then
-        LIBSURFACEFLINGER="$(cat /data/local/tmp/libsurfaceflinger.sha | awk '{ print $2 }')"
-        if [ "$(cat /data/local/tmp/libsurfaceflinger.sha)" == "$(sha1sum $LIBSURFACEFLINGER)" ]; then
-            mount -o bind /data/local/tmp/libs.so $LIBSURFACEFLINGER
-            setprop isHDRLayer.patched 1
-        fi
-    fi
-fi
+frp_node="$(getprop ro.frp.pst)"
+chown -h system.system $frp_node
+chmod 0660 $frp_node

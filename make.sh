@@ -7,7 +7,7 @@ usage()
 echo "Usage: $0 <Path to GSI system> <Firmware type> <Output type> [Output Dir]"
     echo -e "\tPath to GSI system: Mount GSI and set mount point"
     echo -e "\tFirmware type: Firmware mode"
-    echo -e "\tOutput type: AB or A-Only"
+    echo -e "\tOutput type: AB or Aonly"
     echo -e "\tOutput Dir: set output dir"
 }
 
@@ -75,6 +75,7 @@ prebuiltdir="$LOCALDIR/prebuilt"
 scriptsdir="$LOCALDIR/scripts"
 
 echo "Create Temp dir"
+rm -rf $tempdir
 mkdir -p "$systemdir"
 
 if [ "$sourcetype" == "Aonly" ]; then
@@ -85,10 +86,16 @@ if [ "$sourcetype" == "Aonly" ]; then
     echo "Making copy of source rom to temp"
     ( cd "$sourcepath" ; sudo tar cf - . ) | ( cd "$systemdir/system" ; sudo tar xf - )
     cd "$LOCALDIR"
+    sed -i "/ro.build.system_root_image/d" "$systemdir/system/build.prop"
+    sed -i "/ro.build.ab_update/d" "$systemdir/system/build.prop"
+    echo "ro.build.system_root_image=false" >> "$systemdir/system/build.prop"
 else
     echo "Making copy of source rom to temp"
     ( cd "$sourcepath" ; sudo tar cf - . ) | ( cd "$systemdir" ; sudo tar xf - )
     cd "$LOCALDIR"
+    sed -i "/ro.build.system_root_image/d" "$systemdir/system/build.prop"
+    sed -i "/ro.build.ab_update/d" "$systemdir/system/build.prop"
+    echo "ro.build.system_root_image=true" >> "$systemdir/system/build.prop"
 fi
 
 # Detect is the src treble ro.treble.enabled=true
@@ -133,7 +140,13 @@ $romsdir/$sourcever/$romtype/$romtypename/debloat.sh "$systemdir/system" 2>/dev/
 if [[ ! -e $romsdir/$sourcever/$romtype/$romtypename/DONTRESIGN ]]; then
     if [[ ! -e $romsdir/$sourcever/$romtype/DONTRESIGN ]]; then
         echo "Resigning to AOSP keys"
-        python2 $toolsdir/ROM_resigner/resign.py "$systemdir/system" $toolsdir/ROM_resigner/AOSP_security > $tempdir/resign.log
+        ispython2=`python -c 'import sys; print("%i" % (sys.hexversion<0x03000000))'`
+        if [ $ispython2 -eq 0 ]; then
+            python2=python2
+        else
+            python2=python
+        fi
+        $python2 $toolsdir/ROM_resigner/resign.py "$systemdir/system" $toolsdir/ROM_resigner/AOSP_security > $tempdir/resign.log
         $prebuiltdir/resigned/make.sh "$systemdir/system" 2>/dev/null
     fi
 fi
@@ -142,9 +155,9 @@ fi
 echo "Patching started..."
 $scriptsdir/fixsymlinks.sh "$systemdir/system" 2>/dev/null
 $scriptsdir/nukeABstuffs.sh "$systemdir/system" 2>/dev/null
-$prebuiltdir/common/make.sh "$systemdir/system" "$romsdir/$sourcever/$romtype" 2>/dev/null
 $prebuiltdir/$sourcever/make.sh "$systemdir/system" "$romsdir/$sourcever/$romtype" 2>/dev/null
 $prebuiltdir/$sourcever/makeroot.sh "$systemdir" "$romsdir/$sourcever/$romtype" 2>/dev/null
+$prebuiltdir/common/make.sh "$systemdir/system" "$romsdir/$sourcever/$romtype" 2>/dev/null
 $prebuiltdir/vendor_vndk/make$sourcever.sh "$systemdir/system" 2>/dev/null
 $romsdir/$sourcever/$romtype/make.sh "$systemdir/system" 2>/dev/null
 $romsdir/$sourcever/$romtype/makeroot.sh "$systemdir" 2>/dev/null
